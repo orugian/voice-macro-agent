@@ -211,6 +211,70 @@ def t_startup_paths():
 
 check("pasta Startup e pythonw.exe existem", t_startup_paths)
 
+# ── 10. Sanitizacao de injecao ────────────────────────────────────────────────
+print("\n=== 10. Sanitizacao de injecao ===")
+
+def t_sanitize_control_chars():
+    from app.injection.injector import _sanitize
+    # Caracteres de controle devem ser removidos
+    assert _sanitize("\x00\x01\x08texto\x1f") == "texto"
+    assert _sanitize("linha1\x1btexto") == "linha1texto"   # ESC removido
+    assert _sanitize("\x7ftexto") == "texto"                # DEL removido
+    # \t e \n devem ser preservados
+    assert _sanitize("col1\tcol2") == "col1\tcol2"
+    assert _sanitize("linha1\nlinha2") == "linha1\nlinha2"
+
+def t_sanitize_truncation():
+    from app.injection.injector import _sanitize, _MAX_INJECT_CHARS
+    longo = "x" * (_MAX_INJECT_CHARS + 1000)
+    resultado = _sanitize(longo)
+    assert len(resultado) == _MAX_INJECT_CHARS, f"Esperado {_MAX_INJECT_CHARS}, got {len(resultado)}"
+
+def t_sanitize_empty_after():
+    from app.injection.injector import _sanitize
+    # Texto que vira vazio apos sanitizacao
+    assert _sanitize("\x01\x02\x03") == ""
+
+def t_inject_skips_empty():
+    """inject() deve retornar silenciosamente se texto for vazio ou virar vazio apos sanitizacao."""
+    from unittest.mock import patch, MagicMock
+    from app.injection import injector
+    with patch("app.injection.injector._inject_clipboard") as mock_cb, \
+         patch("app.injection.injector._inject_typing") as mock_ty:
+        injector.inject("")          # string vazia
+        injector.inject("\x01\x02") # vira vazia apos sanitizacao
+        assert mock_cb.call_count == 0
+        assert mock_ty.call_count == 0
+
+check("controle chars removidos, \\t e \\n preservados", t_sanitize_control_chars)
+check(f"texto > {5000} chars truncado", t_sanitize_truncation)
+check("texto que vira vazio apos sanitizacao", t_sanitize_empty_after)
+check("inject() nao chama clipboard/typing para texto vazio", t_inject_skips_empty)
+
+# ── 11. threading.Event no orchestrator ──────────────────────────────────────
+print("\n=== 11. threading.Event no orchestrator ===")
+
+def t_recording_event_exists():
+    import inspect
+    from app.orchestration.orchestrator import Orchestrator
+    src = inspect.getsource(Orchestrator.__init__)
+    assert "_recording_event" in src
+    assert "threading.Event()" in src
+
+def t_recording_event_lifecycle():
+    """Event deve ser set() no start e clear() no stop."""
+    import inspect
+    from app.orchestration.orchestrator import Orchestrator
+    start_src = inspect.getsource(Orchestrator._on_ptt_start)
+    stop_src = inspect.getsource(Orchestrator._on_ptt_stop)
+    duration_src = inspect.getsource(Orchestrator._update_recording_duration)
+    assert "_recording_event.set()" in start_src
+    assert "_recording_event.clear()" in stop_src
+    assert "_recording_event.wait(" in duration_src
+
+check("_recording_event = threading.Event() em __init__", t_recording_event_exists)
+check("set() no start, clear() no stop, wait() no duration thread", t_recording_event_lifecycle)
+
 # ── Resultado final ───────────────────────────────────────────────────────────
 print()
 if errors:
@@ -219,4 +283,4 @@ if errors:
         print(f"  - {label}: {err}")
     sys.exit(1)
 else:
-    print("TODOS OS 9 GRUPOS PASSARAM")
+    print("TODOS OS 11 GRUPOS PASSARAM")

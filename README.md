@@ -23,10 +23,24 @@ Transcription runs entirely on your GPU via [faster-whisper](https://github.com/
 
 ## Quick Start
 
+### Option A — Automated setup (recommended)
+
+```powershell
+git clone https://github.com/orugian/voice-macro-agent.git
+cd voice-macro-agent
+python scripts/setup.py
+```
+
+The script creates the virtual environment, installs all dependencies, prompts for your OpenRouter API key (optional), and validates CUDA. When it finishes, run `launch.bat` or `.venv\Scripts\python.exe main.py`.
+
+> **Note:** Run `setup.py` from a standard **PowerShell** or **cmd** window — not PowerShell ISE — so the API key prompt masks your input correctly.
+
+### Option B — Manual setup
+
 ```powershell
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/voice-macro.git
-cd voice-macro
+git clone https://github.com/orugian/voice-macro-agent.git
+cd voice-macro-agent
 
 # 2. Virtual environment
 python -m venv .venv
@@ -69,6 +83,8 @@ Right-click the tray icon to switch modes or exit.
 | Amber | `processing` | Transcribing / calling LLM |
 | Bright green | `done` | Text injected (shown 0.5 s) |
 | Dark red | `error` | See `voice-macro.log` for details |
+
+After each successful transcription, a **Windows toast notification** appears in the bottom-right corner showing the pipeline latency (e.g. *"STT 0.8s · LLM 1.2s"*). Requires `winotify`, which is included in `requirements.txt`.
 
 ---
 
@@ -127,6 +143,20 @@ combination = "ctrl+shift+r"   # default
 combination = "ctrl+alt+r"     # alternative (avoid in VNC/RDP sessions)
 combination = "f9"             # single key
 ```
+
+### Auto-start with Windows (optional)
+
+To launch voice-macro silently at login (no console window, starts in the disabled state so VRAM stays free until you activate):
+
+```powershell
+# Install — creates a shortcut in the user's Startup folder
+.venv\Scripts\python.exe scripts\setup_windows_startup.py
+
+# Remove
+.venv\Scripts\python.exe scripts\setup_windows_startup.py --remove
+```
+
+The app starts **disabled** by default (`start_enabled = false` in `config.toml`). Left-click the tray icon to load the STT model when you need it.
 
 ---
 
@@ -201,6 +231,8 @@ voice-macro/
 │   ├── refine.txt
 │   └── action.txt
 ├── scripts/
+│   ├── setup.py                  # guided setup for new users (recommended first step)
+│   ├── setup_windows_startup.py  # configure auto-start at Windows login
 │   ├── debug_keys.py             # diagnose hotkey detection
 │   ├── debug_audio.py            # diagnose microphone
 │   ├── debug_inject.py           # diagnose text injection

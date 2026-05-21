@@ -28,6 +28,7 @@ class Orchestrator:
         self._event_queue = event_queue
         self._llm_client = llm_client
         self._recording = False
+        self._recording_event = threading.Event()  # set=gravando, clear=parado
         self._recording_start: float = 0.0
         self._samplerate: int = config["audio"]["samplerate"]
         self._current_keys: set = set()
@@ -126,6 +127,7 @@ class Orchestrator:
             return
         self._recording = True
         self._recording_start = time.monotonic()
+        self._recording_event.set()
         self.tray.set_state("recording")
         self.audio.start_recording()
         _beep(1000, 100)  # start: 1kHz 100ms
@@ -133,13 +135,14 @@ class Orchestrator:
         logger.debug("PTT start — recording")
 
     def _update_recording_duration(self) -> None:
-        while self._recording:
+        """Atualiza tooltip a cada 0.5 s enquanto grava. Sai imediatamente ao Event.clear()."""
+        while self._recording_event.wait(timeout=0.5):
             elapsed = time.monotonic() - self._recording_start
             self.tray.set_recording_duration(elapsed)
-            time.sleep(0.5)
 
     def _on_ptt_stop(self) -> None:
         self._recording = False
+        self._recording_event.clear()
         _beep(600, 150)  # stop: 600Hz 150ms
         self.tray.set_state("processing")
         audio = self.audio.stop_recording()

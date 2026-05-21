@@ -11,6 +11,7 @@ O que faz:
     5. Valida CUDA e faster-whisper
 """
 import sys
+import getpass
 import subprocess
 from pathlib import Path
 
@@ -69,7 +70,7 @@ def main() -> None:
         print("  Para usar modos com LLM (CLEAN, SUMMARY, etc.),")
         print("  você precisa de uma chave OpenRouter.")
         print("  Obtenha em: https://openrouter.ai/keys")
-        key = input("\n  Cole sua OPENROUTER_API_KEY (Enter para pular): ").strip()
+        key = getpass.getpass("\n  Cole sua OPENROUTER_API_KEY (Enter para pular, Ctrl+C para cancelar): ").strip()
         if key:
             env_path.write_text(f"OPENROUTER_API_KEY={key}\n", encoding="utf-8")
             print("  .env criado com a chave")

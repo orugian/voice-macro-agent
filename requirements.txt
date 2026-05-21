@@ -1,0 +1,16 @@
+faster-whisper>=1.2.1
+nvidia-cublas-cu12
+nvidia-cudnn-cu12==9.*
+sounddevice>=0.4.6
+numpy>=1.24
+scipy>=1.10
+pyperclip>=1.8
+keyboard>=0.13.5
+pynput>=1.7.6
+pystray>=0.19.5
+Pillow>=10.0
+openai>=1.0
+python-dotenv>=1.0
+truststore>=0.9.1
+winotify>=0.1.1
+tomllib>=2.0; python_version < "3.11"

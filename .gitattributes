@@ -1,0 +1,5 @@
+# Normaliza line endings: LF no repositório, conversão automática no checkout
+* text=auto eol=lf
+
+# .bat precisa de CRLF para funcionar no Windows
+*.bat text eol=crlf

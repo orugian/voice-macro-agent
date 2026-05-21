@@ -1,0 +1,34 @@
+# Ambiente virtual
+.venv/
+
+# Segredos — nunca commitar
+.env
+
+# Python
+*.pyc
+*.pyo
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# Logs e áudio (privacidade)
+*.log
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# PyInstaller
+dist/
+build/
+*.spec.bak
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Windows
+Thumbs.db
+desktop.ini

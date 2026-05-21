@@ -1,0 +1,24 @@
+[hotkey]
+combination = "ctrl+shift+r"
+
+[stt]
+model = "large-v3-turbo"
+device = "cuda"
+compute_type = "float16"
+language = ""          # vazio = auto-detect
+
+[llm]
+model = "google/gemini-2.5-flash-lite"
+max_tokens = 1000
+temperature = 0.3
+
+[audio]
+samplerate = 16000
+channels = 1
+max_duration_seconds = 60
+
+[app]
+default_mode = "DICTATE"
+start_enabled = false
+log_level = "INFO"
+delete_audio_after_processing = true

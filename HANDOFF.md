@@ -77,23 +77,35 @@ voice-macro/
 
 ---
 
-## Fase 4 — Governance (PENDENTE)
+## Fase 4 — Governance ✅
 
-Estes itens ainda não foram feitos:
-- [ ] Verificar `.gitignore` (cobertura de `.env`, `*.log`, `.venv/`, `__pycache__/`, `*.wav`)
-- [ ] Criar `VERSION` file (`1.0.0`)
-- [ ] Criar/verificar `.env.example` com template
+- [x] `.gitignore` — cobre `.env`, `*.log`, `.venv/`, `__pycache__/`, `*.wav`, `dist/`, `build/`
+- [x] `.gitattributes` — normaliza LF no repo, CRLF para .bat
+- [x] `VERSION` — `1.0.0`
+- [x] `.env.example` — com comentários e link para obter chave
+- [x] Repositório git inicializado — commit inicial `5979872` com 45 arquivos
 
 ---
 
-## Próxima sessão sugerida
+## Projeto concluído — todas as fases implementadas
 
-1. Verificar ambiente: `.venv\Scripts\python.exe main.py` → 6 modos no tray
-2. Testar toast: gravar algo → verificar se notificação aparece no Windows
-3. Testar beep: ouvir sons em start/stop/error
-4. Testar startup: `python scripts/setup_windows_startup.py` → verificar bat criado
-5. Completar Fase 4: .gitignore + VERSION file
-6. Opcional: testar `pyinstaller voice-macro.spec` (requer `pip install pyinstaller`)
+| Fase | Status |
+|---|---|
+| 0 — Setup | ✅ |
+| 1 — MVP Core (DICTATE + tray) | ✅ |
+| 2 — Intelligence Layer (5 modos LLM) | ✅ |
+| 3 — Robustez | ✅ |
+| 4 — Governance | ✅ |
+| 5 — UX (toast, ícone, tooltip duração) | ✅ |
+| 6 — Distribuição (setup.py, startup, spec) | ✅ |
+
+---
+
+## Próximos passos opcionais
+
+- Fazer push para GitHub: `git remote add origin <url> && git push -u origin master`
+- Testar build PyInstaller: `pip install pyinstaller && pyinstaller voice-macro.spec`
+- Criar tag de release: `git tag v1.0.0`
 
 ---
 

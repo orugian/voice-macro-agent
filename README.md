@@ -1,5 +1,8 @@
 # voice-macro
 
+<img width="1942" height="809" alt="ChatGPT Image 22 de mai  de 2026, 19_24_13" src="https://github.com/user-attachments/assets/97165e1b-aca2-4e4a-9aca-cf7002013980" />
+
+
 Local push-to-talk transcription and AI text processing for Windows. Speak → text appears in any active field, optionally refined by a large language model.
 
 Transcription runs entirely on your GPU via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (no internet required for DICTATE mode). LLM modes are optional and route through [OpenRouter](https://openrouter.ai) at minimal cost — typically less than $0.001 per operation.

@@ -9,7 +9,7 @@ language = ""          # vazio = auto-detect
 
 [llm]
 model = "google/gemini-2.5-flash-lite"
-max_tokens = 1000
+max_tokens = 1500
 temperature = 0.3
 
 [audio]
@@ -22,3 +22,5 @@ default_mode = "DICTATE"
 start_enabled = false
 log_level = "INFO"
 delete_audio_after_processing = true
+sounds_enabled = true
+hud_enabled = true

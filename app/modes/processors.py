@@ -11,6 +11,7 @@ _PROMPT_FILES = {
     "INSTRUCT": "instruct.txt",
     "REFINE":   "refine.txt",
     "ACTION":   "action.txt",
+    "PLAN":     "plan.txt",
 }
 
 _cache: dict[str, str] = {}

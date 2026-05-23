@@ -2,19 +2,15 @@ import time
 import queue
 import logging
 import threading
-import winsound
 import numpy as np
 from pynput import keyboard as pynput_keyboard
 from app.modes import processors
+from app.audio import sounds
 
 logger = logging.getLogger(__name__)
 
 _MIN_DURATION_S = 0.5   # gravações menores que isso são ignoradas (tecla acidental)
 _SILENCE_THRESHOLD = 0.01  # pico de amplitude máximo para considerar áudio vazio
-
-
-def _beep(freq: int, duration_ms: int) -> None:
-    threading.Thread(target=winsound.Beep, args=(freq, duration_ms), daemon=True).start()
 
 
 class Orchestrator:
@@ -34,6 +30,7 @@ class Orchestrator:
         self._current_keys: set = set()
         self._hotkey_parts: list[set] = []
         self._listener: pynput_keyboard.Listener | None = None
+        self._sounds_enabled: bool = config["app"].get("sounds_enabled", True)
         self._setup_listener()
 
     def _parse_combo(self, combo: str) -> list[set]:
@@ -130,7 +127,8 @@ class Orchestrator:
         self._recording_event.set()
         self.tray.set_state("recording")
         self.audio.start_recording()
-        _beep(1000, 100)  # start: 1kHz 100ms
+        if self._sounds_enabled:
+            sounds.start_recording()
         threading.Thread(target=self._update_recording_duration, daemon=True).start()
         logger.debug("PTT start — recording")
 
@@ -143,7 +141,8 @@ class Orchestrator:
     def _on_ptt_stop(self) -> None:
         self._recording = False
         self._recording_event.clear()
-        _beep(600, 150)  # stop: 600Hz 150ms
+        if self._sounds_enabled:
+            sounds.stop_recording()
         self.tray.set_state("processing")
         audio = self.audio.stop_recording()
 
@@ -176,6 +175,8 @@ class Orchestrator:
                     logger.info(f"LLM [{mode}] {len(text)} chars in {elapsed_llm:.2f}s")
                 if text.strip():
                     self._inject(text)
+                    if self._sounds_enabled:
+                        sounds.success()
 
             latency_info = f"STT {elapsed_stt:.1f}s"
             if elapsed_llm is not None:
@@ -183,7 +184,8 @@ class Orchestrator:
             self.tray.set_state("done", latency_info)
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
-            _beep(400, 200)  # error: 400Hz 200ms
+            if self._sounds_enabled:
+                sounds.error()
             self.tray.set_state("error")
         finally:
             time.sleep(0.5)

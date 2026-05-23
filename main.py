@@ -42,13 +42,13 @@ def main() -> None:
     if CONFIG["llm"]["api_key"]:
         llm_client = LLMClient(CONFIG)
     else:
-        log.warning("OPENROUTER_API_KEY not set — LLM modes (CLEAN/SUMMARY/INSTRUCT/REFINE/ACTION) unavailable")
+        log.warning("OPENROUTER_API_KEY not set — LLM modes (CLEAN/SUMMARY/INSTRUCT/REFINE/ACTION/PLAN) unavailable")
 
     event_queue = queue.Queue()
 
     audio = AudioCapture(CONFIG)
     transcriber = Transcriber(CONFIG)
-    tray = TrayIcon(transcriber, event_queue)
+    tray = TrayIcon(transcriber, event_queue, CONFIG)
     orchestrator = Orchestrator(CONFIG, tray, audio, transcriber, inject, event_queue, llm_client)
 
     tray.start()

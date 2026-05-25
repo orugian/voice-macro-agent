@@ -2,6 +2,7 @@ import time
 import queue
 import threading
 import logging
+from pathlib import Path
 from PIL import Image, ImageDraw
 import pystray
 
@@ -30,83 +31,92 @@ _STATE_TOOLTIPS = {
 
 MODES = ["DICTATE", "CLEAN", "SUMMARY", "INSTRUCT", "REFINE", "ACTION", "PLAN"]
 
-# ── Dragon icon (Haku-inspired) ──────────────────────────────────────────────
-#
-# 64×64 RGBA.  Eastern dragon head in profile, facing right.
-# Palette: near-black bg, cool-white scales, teal mane, golden antlers.
-# State colour drives the eye glow; recording frame 1 pulses the glow.
+# ── Icon rendering ────────────────────────────────────────────────────────────
+_BG    = "#0D1117"    # near-black background
+_HEAD  = "#D8E4EF"    # cool-white dragon silhouette
+_EYE_W = "#FFFEF0"    # eye white
+_PUPIL = "#0A0B16"    # slit pupil
 
-_BG       = "#0D1117"
-_HEAD     = "#D8E4EF"   # cool white scales
-_TEAL     = "#00C8DC"   # mane / whiskers
-_TEAL_HI  = "#40E8FF"   # brighter teal for animated frame
-_ANTLER   = "#B8956A"   # golden-tan antlers
-
-
-def _draw_mane(d: ImageDraw.ImageDraw, teal: str) -> None:
-    """Three flowing arcs behind the head — Haku's characteristic mane."""
-    d.arc((1, 12, 20, 42),  start=195, end=320, fill=teal, width=2)
-    d.arc((3,  5, 19, 28),  start=205, end=335, fill=teal, width=2)
-    d.arc((0, 22, 12, 46),  start=180, end=278, fill=teal, width=2)
-
-
-def _draw_head(d: ImageDraw.ImageDraw) -> None:
-    """Dragon head: forehead dome + main cranium + elongated snout."""
-    d.ellipse(( 9, 10, 40, 34), fill=_HEAD)   # forehead dome
-    d.ellipse(( 8, 16, 48, 52), fill=_HEAD)   # main cranium
-    d.ellipse((35, 26, 60, 44), fill=_HEAD)   # snout
-
-
-def _draw_antlers(d: ImageDraw.ImageDraw) -> None:
-    """Two forked antlers — Haku's most distinctive feature."""
-    # Left antler
-    d.line([(22, 16), (17,  8)], fill=_ANTLER, width=2)
-    d.line([(17,  8), (13,  3)], fill=_ANTLER, width=2)
-    d.line([(17,  8), (20,  3)], fill=_ANTLER, width=2)
-    # Right antler
-    d.line([(30, 13), (28,  5)], fill=_ANTLER, width=2)
-    d.line([(28,  5), (24,  1)], fill=_ANTLER, width=2)
-    d.line([(28,  5), (31,  1)], fill=_ANTLER, width=2)
-
-
-def _draw_eye(d: ImageDraw.ImageDraw, state_color: str, frame: int) -> None:
-    """Glowing slit eye — glow radius pulses on recording frame 1."""
-    ex, ey = 43, 33
-    # Outer glow (larger on animated frame)
-    gr = 8 if frame == 1 else 6
-    d.ellipse((ex - gr, ey - gr, ex + gr, ey + gr), fill=state_color)
-    # Eye white
-    d.ellipse((ex - 5, ey - 5, ex + 5, ey + 5), fill="#FFFEF0")
-    # Vertical slit pupil
-    d.rectangle((ex - 1, ey - 4, ex + 1, ey + 4), fill="#0A0B16")
-
-
-def _draw_whiskers(d: ImageDraw.ImageDraw, teal: str) -> None:
-    """Three barbels trailing from snout — characteristic of eastern dragons."""
-    d.line([(54, 32), (61, 28)], fill=teal, width=1)
-    d.line([(55, 35), (62, 35)], fill=teal, width=1)
-    d.line([(54, 39), (61, 43)], fill=teal, width=1)
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 def _make_dragon_icon(state: str, frame: int = 0) -> Image.Image:
-    """Render one 64×64 RGBA frame of the Haku dragon icon."""
+    """Render one 64×64 RGBA dragon icon, optimised for legibility at tray scale.
+
+    Design principles for 16×16 effective rendering:
+    - Only bold solid shapes (no thin lines)
+    - State expressed as a large coloured eye — dominant at small sizes
+    - Dorsal horn provides silhouette recognition at a glance
+    """
     color = _STATE_COLORS[state]
-    teal  = _TEAL_HI if frame == 1 else _TEAL
 
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    d   = ImageDraw.Draw(img)
+    d = ImageDraw.Draw(img)
 
     # Background
     d.rounded_rectangle((0, 0, 63, 63), radius=12, fill=_BG)
 
-    # Draw in painter's order: mane → head → antlers → eye → whiskers
-    _draw_mane(d, teal)
-    _draw_head(d)
-    _draw_antlers(d)
-    _draw_eye(d, color, frame)
-    _draw_whiskers(d, teal)
+    # Dragon silhouette — three overlapping bold shapes
+    d.ellipse(( 6,  8, 46, 52), fill=_HEAD)             # cranium
+    d.ellipse((30, 18, 58, 44), fill=_HEAD)              # snout (extends right)
+    d.polygon([(18, 8), (13, 0), (27, 4)], fill=_HEAD)   # dorsal horn
+
+    # Eye — large, state-coloured; primary state indicator at tray scale
+    ex, ey = 42, 30
+    glow_r = 11 + (3 if frame == 1 else 0)   # 11 px at rest → 14 px on recording pulse
+    d.ellipse((ex - glow_r, ey - glow_r, ex + glow_r, ey + glow_r), fill=color)
+    d.ellipse((ex - 6,      ey - 6,      ex + 6,      ey + 6),      fill=_EYE_W)
+    d.rectangle((ex - 2,    ey - 5,      ex + 2,      ey + 5),      fill=_PUPIL)
 
     return img
+
+
+def _build_icon_cache(project_root: Path) -> dict[str, Image.Image]:
+    """Load icons from assets/icons/ if present, otherwise generate via PIL.
+
+    Drop a file named icon_{state}.png in assets/icons/ to override any state.
+    icon_recording_1.png overrides the pulsed recording animation frame.
+    """
+    assets = project_root / "assets" / "icons"
+    icons: dict[str, Image.Image] = {}
+
+    keys = list(_STATE_COLORS.keys()) + ["recording_1"]
+    for key in keys:
+        state = "recording" if key == "recording_1" else key
+        frame = 1          if key == "recording_1" else 0
+        path  = assets / f"icon_{key}.png"
+        if path.exists():
+            try:
+                icons[key] = Image.open(path).convert("RGBA").resize((64, 64), Image.LANCZOS)
+                logger.debug(f"Loaded icon from file: {path.name}")
+                continue
+            except Exception as e:
+                logger.warning(f"Failed to load {path.name}: {e} — using generated icon")
+        icons[key] = _make_dragon_icon(state, frame=frame)
+
+    return icons
+
+
+def _save_icon_cache(icons: dict[str, Image.Image], project_root: Path) -> None:
+    """Write generated icons to assets/icons/ for inspection and custom replacement.
+
+    Existing files are never overwritten — delete a file to regenerate it.
+    Also creates voice-macro.ico (multi-size) used by scripts/create_shortcut.py.
+    """
+    assets = project_root / "assets" / "icons"
+    try:
+        assets.mkdir(parents=True, exist_ok=True)
+        for name, img in icons.items():
+            path = assets / f"icon_{name}.png"
+            if not path.exists():
+                img.save(path)
+        ico_path = assets / "voice-macro.ico"
+        if not ico_path.exists():
+            base = icons.get("idle", _make_dragon_icon("idle"))
+            base.save(ico_path, format="ICO",
+                      sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
+    except Exception as e:
+        logger.warning(f"Could not save icon cache to assets/: {e}")
 
 
 # ── TrayIcon ─────────────────────────────────────────────────────────────────
@@ -117,20 +127,20 @@ class TrayIcon:
         self._transcriber = transcriber
         self._event_queue = event_queue
         self._current_mode = "DICTATE"
+        self._current_state = "disabled"
+        self._config = config or {}
 
-        # Pre-render all state icons + 2 recording animation frames
-        self._icons: dict[str, Image.Image] = {}
-        for state in _STATE_COLORS:
-            self._icons[state] = _make_dragon_icon(state)
-        self._icons["recording_1"] = _make_dragon_icon("recording", frame=1)
+        # Build icon cache (loads from assets/ or generates + saves to disk)
+        self._icons = _build_icon_cache(_PROJECT_ROOT)
+        _save_icon_cache(self._icons, _PROJECT_ROOT)
 
         self._icon: pystray.Icon | None = None
-        self._animating = False
-        self._animation_thread: threading.Thread | None = None
+        # Event-based animation control: set = stopped, clear = running
+        self._stop_anim = threading.Event()
+        self._stop_anim.set()
 
         # Optional HUD overlay
-        cfg = config or {}
-        hud_enabled = cfg.get("app", {}).get("hud_enabled", True)
+        hud_enabled = self._config.get("app", {}).get("hud_enabled", True)
         self._hud = None
         if hud_enabled:
             try:
@@ -183,7 +193,7 @@ class TrayIcon:
             self._transcriber.disable()
             self.set_state("disabled")
             icon.update_menu()
-        else:
+        elif self._current_state != "loading":   # guard: ignore double-click during load
             self.set_state("loading")
             threading.Thread(target=self._do_enable, args=(icon,), daemon=True).start()
 
@@ -206,17 +216,14 @@ class TrayIcon:
         if self._icon is None:
             return
 
-        # Stop ongoing animation
-        self._animating = False
+        self._current_state = state
+        self._stop_anim.set()   # halt any running animation
 
         if state == "recording":
-            self._icon.icon = self._icons["recording"]
+            self._icon.icon  = self._icons["recording"]
             self._icon.title = _STATE_TOOLTIPS["recording"]
-            self._animating = True
-            self._animation_thread = threading.Thread(
-                target=self._animate_recording, daemon=True
-            )
-            self._animation_thread.start()
+            self._stop_anim.clear()   # arm the animation loop
+            threading.Thread(target=self._animate_recording, daemon=True).start()
         else:
             self._icon.icon = self._icons.get(state, self._icons["idle"])
             tooltip = _STATE_TOOLTIPS.get(state, f"voice-macro — {state}")
@@ -229,18 +236,23 @@ class TrayIcon:
                 ).start()
             self._icon.title = tooltip
 
-        # Update HUD overlay
+        logger.debug(f"Tray state → {state}")
+
         if self._hud is not None:
             self._hud.update(state, self._current_mode)
 
     def _animate_recording(self) -> None:
+        """Alternates recording frames until _stop_anim is set.
+
+        Uses Event.wait(timeout) as both the sleep and the stop-check,
+        eliminating the race condition of a separate bool + sleep pattern.
+        """
         frame = 0
-        while self._animating:
-            key = "recording" if frame == 0 else "recording_1"
+        while not self._stop_anim.wait(timeout=0.44):
             if self._icon:
+                key = "recording" if frame == 0 else "recording_1"
                 self._icon.icon = self._icons[key]
             frame = 1 - frame
-            time.sleep(0.44)
 
     def set_recording_duration(self, seconds: float) -> None:
         if self._icon:
@@ -249,7 +261,6 @@ class TrayIcon:
     def _show_toast(self, info: str) -> None:
         try:
             from winotify import Notification
-            # Include mode and a brief description in the toast
             toast = Notification(
                 app_id="voice-macro",
                 title=f"Texto injetado · {self._current_mode}",
@@ -268,8 +279,21 @@ class TrayIcon:
         t.start()
         logger.info("Tray icon started")
 
+    def start_if_enabled(self) -> None:
+        """Auto-enable STT at startup when start_enabled = true in config.toml.
+
+        Must be called *after* start() so the pystray Win32 loop is running.
+        """
+        if self._config.get("app", {}).get("start_enabled", False):
+            def _delayed() -> None:
+                time.sleep(0.5)   # let pystray Win32 loop settle
+                self.set_state("loading")
+                self._do_enable(self._icon)
+            threading.Thread(target=_delayed, daemon=True).start()
+            logger.info("start_enabled=true — STT auto-enable scheduled")
+
     def stop(self) -> None:
-        self._animating = False
+        self._stop_anim.set()
         if self._hud is not None:
             self._hud.destroy()
         if self._icon:

@@ -20,11 +20,14 @@ block_cipher = None
 # Coleta DLLs CUDA das libs nvidia-* instaladas no venv
 nvidia_binaries = collect_dynamic_libs("nvidia")
 
-# Dados adicionais: prompts e config.toml ficam ao lado do exe
+# Dados adicionais: prompts, config.toml e assets ficam ao lado do exe
+# Nota: assets/icons/ é gerado na primeira execução do app;
+#       rode o app uma vez antes de fazer o build para que o .ico exista.
 added_datas = [
     ("prompts", "prompts"),
     ("config.toml", "."),
     (".env.example", "."),
+    ("assets", "assets"),
 ]
 
 a = Analysis(
@@ -73,7 +76,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon="assets/icons/voice-macro.ico",  # descomente se tiver um .ico
+    icon="assets/icons/voice-macro.ico",   # gerado pelo app na primeira execução
 )
 
 coll = COLLECT(

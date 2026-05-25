@@ -32,3 +32,7 @@ build/
 # Windows
 Thumbs.db
 desktop.ini
+
+# Generated icon assets (created at first app launch; replace with custom artwork)
+assets/icons/*.png
+assets/icons/*.ico

@@ -149,8 +149,8 @@ def _build_icon_cache(project_root: Path) -> dict[str, Image.Image]:
 
     if src_off.exists() and src_on.exists():
         try:
-            off       = _smart_crop(Image.open(src_off)).resize((64, 64), Image.NEAREST)
-            on        = _smart_crop(Image.open(src_on)).resize((64, 64), Image.NEAREST)
+            off       = _smart_crop(Image.open(src_off)).resize((256, 256), Image.LANCZOS)
+            on        = _smart_crop(Image.open(src_on)).resize((256, 256), Image.LANCZOS)
             on_bright = _brighten(on)
 
             icons["disabled"]    = off

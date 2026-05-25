@@ -2,8 +2,10 @@ import time
 import queue
 import threading
 import logging
+from collections import deque
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageEnhance
+import numpy as np
 import pystray
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,65 @@ _PUPIL = "#0A0B16"    # slit pupil
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
+# ── Pixel-art source image processing ────────────────────────────────────────
+
+def _remove_white_bg(img: Image.Image) -> Image.Image:
+    """Remove background via BFS flood-fill from image corners.
+
+    Uses connected-component fill so white pixels *inside* the dragon
+    (scales, highlights) are not affected — only background white that
+    is reachable from any corner is made transparent.
+    """
+    img = img.convert("RGBA")
+    arr = np.array(img, dtype=np.int32)
+    h, w = arr.shape[:2]
+
+    bg = arr[0, 0, :3]          # background colour sampled from top-left
+    visited = np.zeros((h, w), dtype=bool)
+    q: deque = deque()
+
+    for r, c in [(0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1)]:
+        if not visited[r, c]:
+            visited[r, c] = True
+            q.append((r, c))
+
+    while q:
+        r, c = q.popleft()
+        if np.all(np.abs(arr[r, c, :3] - bg) < 30):   # close to bg colour?
+            arr[r, c, 3] = 0                            # make transparent
+            for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
+                if 0 <= nr < h and 0 <= nc < w and not visited[nr, nc]:
+                    visited[nr, nc] = True
+                    q.append((nr, nc))
+
+    return Image.fromarray(arr.astype(np.uint8))
+
+
+def _place_on_dark_bg(dragon: Image.Image, size: int = 64) -> Image.Image:
+    """Fit transparent-bg dragon inside a size×size dark rounded rect tile.
+
+    Uses NEAREST resampling to preserve pixel-art crispness.
+    """
+    dragon = dragon.copy()
+    dragon.thumbnail((size, size), Image.NEAREST)
+
+    bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d  = ImageDraw.Draw(bg)
+    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=10, fill=_BG)
+
+    x = (size - dragon.width)  // 2
+    y = (size - dragon.height) // 2
+    bg.paste(dragon, (x, y), dragon)
+    return bg
+
+
+def _brighten(img: Image.Image, factor: float = 1.35) -> Image.Image:
+    """Return a brightened copy (used for recording animation pulse frame)."""
+    return ImageEnhance.Brightness(img).enhance(factor)
+
+
+# ── Fallback PIL icon (used when no pixel-art sources are present) ────────────
+
 def _make_dragon_icon(state: str, frame: int = 0) -> Image.Image:
     """Render one 64×64 RGBA dragon icon, optimised for legibility at tray scale.
 
@@ -72,14 +133,47 @@ def _make_dragon_icon(state: str, frame: int = 0) -> Image.Image:
 
 
 def _build_icon_cache(project_root: Path) -> dict[str, Image.Image]:
-    """Load icons from assets/icons/ if present, otherwise generate via PIL.
+    """Build the icon dictionary from the best available source.
 
-    Drop a file named icon_{state}.png in assets/icons/ to override any state.
-    icon_recording_1.png overrides the pulsed recording animation frame.
+    Priority order:
+    1. dragon_off.png + dragon_on.png  — pixel-art master images supplied by
+       the user; processed (bg removal → dark tile) and mapped to all states.
+    2. icon_{state}.png individual overrides in assets/icons/.
+    3. Programmatic PIL fallback (_make_dragon_icon).
+
+    State mapping when using pixel-art masters:
+      OFF frame  → disabled, error
+      ON  frame  → idle, loading, recording, processing, done
+      ON bright  → recording_1 (animation pulse)
     """
     assets = project_root / "assets" / "icons"
     icons: dict[str, Image.Image] = {}
 
+    # ── Priority 1: pixel-art master pair ────────────────────────────────────
+    src_off = assets / "dragon_off.png"
+    src_on  = assets / "dragon_on.png"
+
+    if src_off.exists() and src_on.exists():
+        try:
+            off       = _place_on_dark_bg(_remove_white_bg(Image.open(src_off)))
+            on        = _place_on_dark_bg(_remove_white_bg(Image.open(src_on)))
+            on_bright = _brighten(on)
+
+            icons["disabled"]    = off
+            icons["error"]       = off
+            icons["idle"]        = on
+            icons["loading"]     = on
+            icons["recording"]   = on
+            icons["processing"]  = on
+            icons["done"]        = on
+            icons["recording_1"] = on_bright
+
+            logger.info("Tray icons built from dragon_off.png + dragon_on.png")
+            return icons
+        except Exception as e:
+            logger.warning(f"Failed to process pixel-art sources: {e} — falling back")
+
+    # ── Priority 2: individual per-state overrides ────────────────────────────
     keys = list(_STATE_COLORS.keys()) + ["recording_1"]
     for key in keys:
         state = "recording" if key == "recording_1" else key
@@ -92,6 +186,8 @@ def _build_icon_cache(project_root: Path) -> dict[str, Image.Image]:
                 continue
             except Exception as e:
                 logger.warning(f"Failed to load {path.name}: {e} — using generated icon")
+
+        # ── Priority 3: PIL generation ─────────────────────────────────────
         icons[key] = _make_dragon_icon(state, frame=frame)
 
     return icons

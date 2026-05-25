@@ -44,19 +44,21 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # ── Pixel-art source image processing ────────────────────────────────────────
 
-def _remove_white_bg(img: Image.Image) -> Image.Image:
-    """Remove background via BFS flood-fill from image corners.
+def _smart_crop(img: Image.Image, tolerance: int = 20) -> Image.Image:
+    """Crop image to dragon content by BFS-filling the margin colour from corners.
 
-    Uses connected-component fill so white pixels *inside* the dragon
-    (scales, highlights) are not affected — only background white that
-    is reachable from any corner is made transparent.
+    Works for both light (dragon_off, white bg) and dark (dragon_on, black bg)
+    sources: samples the corner pixel as background colour, flood-fills all
+    connected pixels within tolerance, then returns the non-background bbox.
+    Original colours are fully preserved — only the framing changes.
     """
     img = img.convert("RGBA")
     arr = np.array(img, dtype=np.int32)
     h, w = arr.shape[:2]
 
-    bg = arr[0, 0, :3]          # background colour sampled from top-left
+    bg      = arr[0, 0, :3]
     visited = np.zeros((h, w), dtype=bool)
+    is_bg   = np.zeros((h, w), dtype=bool)
     q: deque = deque()
 
     for r, c in [(0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1)]:
@@ -66,43 +68,24 @@ def _remove_white_bg(img: Image.Image) -> Image.Image:
 
     while q:
         r, c = q.popleft()
-        if np.all(np.abs(arr[r, c, :3] - bg) < 30):   # close to bg colour?
-            arr[r, c, 3] = 0                            # make transparent
+        if np.all(np.abs(arr[r, c, :3] - bg) < tolerance):
+            is_bg[r, c] = True
             for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
                 if 0 <= nr < h and 0 <= nc < w and not visited[nr, nc]:
                     visited[nr, nc] = True
                     q.append((nr, nc))
 
-    return Image.fromarray(arr.astype(np.uint8))
+    content = ~is_bg
+    rows = np.any(content, axis=1)
+    cols = np.any(content, axis=0)
+    if not rows.any():
+        return img   # nothing to crop — return as-is
 
-
-def _place_on_dark_bg(dragon: Image.Image, size: int = 64) -> Image.Image:
-    """Fit transparent-bg dragon inside a size×size dark rounded rect tile.
-
-    Crops to the bounding box of opaque pixels first so the dragon fills
-    the tile rather than floating in a sea of empty space.
-    Uses NEAREST resampling to preserve pixel-art crispness.
-    """
-    dragon = dragon.copy()
-
-    # Crop away empty transparent border so the dragon fills the tile
-    bbox = dragon.getbbox()
-    if bbox:
-        dragon = dragon.crop(bbox)
-
-    # Leave a small breathing margin (4 px each side at 64 px)
-    padding = max(2, size // 16)
-    target  = size - 2 * padding
-    dragon.thumbnail((target, target), Image.NEAREST)
-
-    bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d  = ImageDraw.Draw(bg)
-    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=10, fill=_BG)
-
-    x = (size - dragon.width)  // 2
-    y = (size - dragon.height) // 2
-    bg.paste(dragon, (x, y), dragon)
-    return bg
+    rmin = int(np.where(rows)[0][0])
+    rmax = int(np.where(rows)[0][-1])
+    cmin = int(np.where(cols)[0][0])
+    cmax = int(np.where(cols)[0][-1])
+    return img.crop((cmin, rmin, cmax + 1, rmax + 1))
 
 
 def _brighten(img: Image.Image, factor: float = 1.35) -> Image.Image:
@@ -166,8 +149,8 @@ def _build_icon_cache(project_root: Path) -> dict[str, Image.Image]:
 
     if src_off.exists() and src_on.exists():
         try:
-            off       = Image.open(src_off).convert("RGBA").resize((64, 64), Image.NEAREST)
-            on        = Image.open(src_on).convert("RGBA").resize((64, 64), Image.NEAREST)
+            off       = _smart_crop(Image.open(src_off)).resize((64, 64), Image.NEAREST)
+            on        = _smart_crop(Image.open(src_on)).resize((64, 64), Image.NEAREST)
             on_bright = _brighten(on)
 
             icons["disabled"]    = off

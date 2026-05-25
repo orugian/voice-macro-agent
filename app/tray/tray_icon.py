@@ -44,48 +44,35 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # ── Pixel-art source image processing ────────────────────────────────────────
 
-def _smart_crop(img: Image.Image, tolerance: int = 20) -> Image.Image:
-    """Crop image to dragon content by BFS-filling the margin colour from corners.
+def _smart_crop(img: Image.Image, tolerance: int = 30) -> Image.Image:
+    """Crop away uniform margin rows/columns around the dragon.
 
-    Works for both light (dragon_off, white bg) and dark (dragon_on, black bg)
-    sources: samples the corner pixel as background colour, flood-fills all
-    connected pixels within tolerance, then returns the non-background bbox.
-    Original colours are fully preserved — only the framing changes.
+    Samples the corner pixel as background colour, then removes leading and
+    trailing rows/columns where EVERY pixel is within `tolerance` of that
+    colour.  Works for light (dragon_off) and dark (dragon_on) images; if
+    the dragon already fills the canvas the image is returned unchanged.
     """
-    img = img.convert("RGBA")
-    arr = np.array(img, dtype=np.int32)
-    h, w = arr.shape[:2]
+    rgba = img.convert("RGBA")
+    arr  = np.array(rgba, dtype=np.int32)
 
-    bg      = arr[0, 0, :3]
-    visited = np.zeros((h, w), dtype=bool)
-    is_bg   = np.zeros((h, w), dtype=bool)
-    q: deque = deque()
+    bg   = arr[0, 0, :3]
+    diff = np.max(np.abs(arr[:, :, :3] - bg), axis=2)   # per-pixel max-channel diff
 
-    for r, c in [(0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1)]:
-        if not visited[r, c]:
-            visited[r, c] = True
-            q.append((r, c))
+    empty_rows = np.all(diff < tolerance, axis=1)         # True = uniform/margin row
+    empty_cols = np.all(diff < tolerance, axis=0)
 
-    while q:
-        r, c = q.popleft()
-        if np.all(np.abs(arr[r, c, :3] - bg) < tolerance):
-            is_bg[r, c] = True
-            for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
-                if 0 <= nr < h and 0 <= nc < w and not visited[nr, nc]:
-                    visited[nr, nc] = True
-                    q.append((nr, nc))
+    content_rows = ~empty_rows
+    content_cols = ~empty_cols
 
-    content = ~is_bg
-    rows = np.any(content, axis=1)
-    cols = np.any(content, axis=0)
-    if not rows.any():
-        return img   # nothing to crop — return as-is
+    if not content_rows.any():
+        return rgba   # nothing to crop
 
-    rmin = int(np.where(rows)[0][0])
-    rmax = int(np.where(rows)[0][-1])
-    cmin = int(np.where(cols)[0][0])
-    cmax = int(np.where(cols)[0][-1])
-    return img.crop((cmin, rmin, cmax + 1, rmax + 1))
+    top    = int(np.argmax(content_rows))
+    bottom = int(arr.shape[0] - np.argmax(content_rows[::-1]))
+    left   = int(np.argmax(content_cols))
+    right  = int(arr.shape[1] - np.argmax(content_cols[::-1]))
+
+    return rgba.crop((left, top, right, bottom))
 
 
 def _brighten(img: Image.Image, factor: float = 1.35) -> Image.Image:

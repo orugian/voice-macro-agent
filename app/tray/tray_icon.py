@@ -166,8 +166,8 @@ def _build_icon_cache(project_root: Path) -> dict[str, Image.Image]:
 
     if src_off.exists() and src_on.exists():
         try:
-            off       = _place_on_dark_bg(_remove_white_bg(Image.open(src_off)))
-            on        = _place_on_dark_bg(_remove_white_bg(Image.open(src_on)))
+            off       = Image.open(src_off).convert("RGBA").resize((64, 64), Image.NEAREST)
+            on        = Image.open(src_on).convert("RGBA").resize((64, 64), Image.NEAREST)
             on_bright = _brighten(on)
 
             icons["disabled"]    = off

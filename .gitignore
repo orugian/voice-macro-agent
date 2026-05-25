@@ -33,6 +33,6 @@ build/
 Thumbs.db
 desktop.ini
 
-# Generated icon assets (created at first app launch; replace with custom artwork)
+# Icon assets — generated PNGs/ICOs and large pixel-art source files
 assets/icons/*.png
 assets/icons/*.ico

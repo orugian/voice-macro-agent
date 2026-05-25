@@ -79,10 +79,21 @@ def _remove_white_bg(img: Image.Image) -> Image.Image:
 def _place_on_dark_bg(dragon: Image.Image, size: int = 64) -> Image.Image:
     """Fit transparent-bg dragon inside a size×size dark rounded rect tile.
 
+    Crops to the bounding box of opaque pixels first so the dragon fills
+    the tile rather than floating in a sea of empty space.
     Uses NEAREST resampling to preserve pixel-art crispness.
     """
     dragon = dragon.copy()
-    dragon.thumbnail((size, size), Image.NEAREST)
+
+    # Crop away empty transparent border so the dragon fills the tile
+    bbox = dragon.getbbox()
+    if bbox:
+        dragon = dragon.crop(bbox)
+
+    # Leave a small breathing margin (4 px each side at 64 px)
+    padding = max(2, size // 16)
+    target  = size - 2 * padding
+    dragon.thumbnail((target, target), Image.NEAREST)
 
     bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d  = ImageDraw.Draw(bg)

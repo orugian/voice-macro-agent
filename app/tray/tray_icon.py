@@ -45,27 +45,35 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 # ── Pixel-art source image processing ────────────────────────────────────────
 
 def _smart_crop(img: Image.Image, tolerance: int = 30) -> Image.Image:
-    """Crop away uniform margin rows/columns around the dragon.
+    """Crop away margins around the dragon, maximising canvas coverage.
 
-    Samples the corner pixel as background colour, then removes leading and
-    trailing rows/columns where EVERY pixel is within `tolerance` of that
-    colour.  Works for light (dragon_off) and dark (dragon_on) images; if
-    the dragon already fills the canvas the image is returned unchanged.
+    Strategy:
+    1. If the image has a transparent background (any alpha < 255), use
+       PIL's getbbox() on the alpha channel — pixel-perfect for RGBA art.
+    2. Otherwise fall back to row/column scan: removes rows/cols where
+       every pixel is within `tolerance` of the corner background colour.
     """
     rgba = img.convert("RGBA")
-    arr  = np.array(rgba, dtype=np.int32)
+    arr  = np.array(rgba)
 
-    bg   = arr[0, 0, :3]
-    diff = np.max(np.abs(arr[:, :, :3] - bg), axis=2)   # per-pixel max-channel diff
+    # ── Strategy 1: transparent background ───────────────────────────────────
+    if arr[:, :, 3].min() == 0:          # at least one fully-transparent pixel
+        bbox = rgba.getbbox()            # bounding box of opaque content
+        if bbox:
+            return rgba.crop(bbox)
+        return rgba
 
-    empty_rows = np.all(diff < tolerance, axis=1)         # True = uniform/margin row
-    empty_cols = np.all(diff < tolerance, axis=0)
+    # ── Strategy 2: opaque background, row/col colour scan ───────────────────
+    bg   = arr[0, 0, :3].astype(np.int32)
+    diff = np.max(np.abs(arr[:, :, :3].astype(np.int32) - bg), axis=2)
 
+    empty_rows   = np.all(diff < tolerance, axis=1)
+    empty_cols   = np.all(diff < tolerance, axis=0)
     content_rows = ~empty_rows
     content_cols = ~empty_cols
 
     if not content_rows.any():
-        return rgba   # nothing to crop
+        return rgba
 
     top    = int(np.argmax(content_rows))
     bottom = int(arr.shape[0] - np.argmax(content_rows[::-1]))

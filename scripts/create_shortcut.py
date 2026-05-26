@@ -13,12 +13,30 @@ import sys
 import os
 import argparse
 import subprocess
+import winreg
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PYTHONW      = PROJECT_ROOT / ".venv" / "Scripts" / "pythonw.exe"
 MAIN_PY      = PROJECT_ROOT / "main.py"
 ICO          = PROJECT_ROOT / "assets" / "icons" / "voice-macro.ico"
+
+_SHELL_FOLDERS = (
+    r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+)
+
+
+def _shell_folder(name: str, fallback: Path) -> Path:
+    """Read the real Windows Shell folder path from the registry.
+
+    Handles OneDrive folder redirection and other custom Desktop/Start Menu
+    locations that differ from the default %USERPROFILE%\\... paths.
+    """
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _SHELL_FOLDERS) as key:
+            return Path(winreg.QueryValueEx(key, name)[0])
+    except Exception:
+        return fallback
 
 
 def _ensure_ico() -> bool:
@@ -81,16 +99,23 @@ def main() -> None:
     created: list[Path] = []
 
     if do_desktop:
-        path = Path(os.path.expandvars("%USERPROFILE%")) / "Desktop" / "voice-macro.lnk"
+        desktop = _shell_folder(
+            "Desktop",
+            fallback=Path.home() / "Desktop",
+        )
+        path = desktop / "voice-macro.lnk"
         _create_lnk(path)
         created.append(path)
 
     if do_startmenu:
-        path = (
-            Path(os.path.expandvars("%APPDATA%"))
-            / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-            / "voice-macro.lnk"
+        programs = _shell_folder(
+            "Programs",
+            fallback=(
+                Path(os.path.expandvars("%APPDATA%"))
+                / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+            ),
         )
+        path = programs / "voice-macro.lnk"
         _create_lnk(path)
         created.append(path)
 

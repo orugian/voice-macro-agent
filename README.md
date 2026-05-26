@@ -18,7 +18,7 @@ Transcription runs entirely on your GPU via [faster-whisper](https://github.com/
 | GPU | NVIDIA with 4 GB+ VRAM | Compute Capability 6.1+ (GTX 10xx or newer) |
 | CUDA | 12.x | Install from [nvidia.com/cuda](https://developer.nvidia.com/cuda-downloads) |
 | Microphone | Any Windows-compatible input | — |
-| OpenRouter API key | Optional | Required for CLEAN / SUMMARY / INSTRUCT / REFINE / ACTION modes |
+| OpenRouter API key | Optional | Required for CLEAN / SUMMARY / INSTRUCT / REFINE / ACTION / PLAN modes |
 
 > **CPU fallback**: Change `device = "cuda"` to `device = "cpu"` in `config.toml`. Transcription will be significantly slower but functional.
 
@@ -26,7 +26,7 @@ Transcription runs entirely on your GPU via [faster-whisper](https://github.com/
 
 ## Quick Start
 
-### Option A — Automated setup (recommended)
+### Step 1 — Environment setup
 
 ```powershell
 git clone https://github.com/orugian/voice-macro-agent.git
@@ -34,29 +34,35 @@ cd voice-macro-agent
 python scripts/setup.py
 ```
 
-The script creates the virtual environment, installs all dependencies, prompts for your OpenRouter API key (optional), and validates CUDA. When it finishes, run `launch.bat` or `.venv\Scripts\python.exe main.py`.
+`setup.py` creates the virtual environment, installs all dependencies, prompts for your OpenRouter API key (optional), and validates CUDA.
 
 > **Note:** Run `setup.py` from a standard **PowerShell** or **cmd** window — not PowerShell ISE — so the API key prompt masks your input correctly.
 
-### Option B — Manual setup
+### Step 2 — Create shortcuts and configure auto-start
+
+After the environment is ready, double-click **`setup.bat`** in the project root. It will:
+
+1. Generate the dragon tray icon (`assets/icons/voice-macro.ico`) if not yet present
+2. Create a **Desktop shortcut** and a **Start Menu entry** (`voice-macro.lnk`)
+3. Register voice-macro to **start automatically with Windows** (disabled by default — no VRAM used until you activate)
+
+> To pin to the taskbar: `Win+S` → type `voice-macro` → right-click → **Pin to taskbar**.
+
+### Manual setup (alternative to setup.bat)
 
 ```powershell
-# 1. Clone
-git clone https://github.com/orugian/voice-macro-agent.git
-cd voice-macro-agent
-
-# 2. Virtual environment
+# Virtual environment
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 
-# 3. Dependencies
+# Dependencies
 pip install -r requirements.txt
 
-# 4. API key (for LLM modes — skip if DICTATE-only)
+# API key (for LLM modes — skip if DICTATE-only)
 copy .env.example .env
 # Edit .env: OPENROUTER_API_KEY=sk-or-...
 
-# 5. Launch
+# Launch directly
 .venv\Scripts\python.exe main.py
 # or double-click launch.bat
 ```
@@ -67,27 +73,42 @@ The STT model (~1.5 GB) downloads automatically on first activation and is cache
 
 ## Usage
 
-| Step | Action | Tray color |
-|------|--------|------------|
-| 1 | Left-click tray icon to enable | Gray → Blue (loading) → Green |
-| 2 | Hold **Ctrl+Shift+R**, speak, release | Green → Red → Amber → Green |
+| Step | Action | Tray icon |
+|------|--------|-----------|
+| 1 | Left-click tray icon to enable | Dark dragon → loading → lit dragon |
+| 2 | Hold **Ctrl+Shift+R**, speak, release | Lit dragon → pulsing → still → lit |
 | 3 | Text appears in whatever field is focused | — |
 
 Right-click the tray icon to switch modes or exit.
 
 ### Tray icon states
 
-| Color | State | Meaning |
-|-------|-------|---------|
-| Gray | `disabled` | STT model not loaded — VRAM is free |
-| Blue | `loading` | Loading model (~3–15 s depending on cache) |
-| Green | `idle` | Ready, waiting for push-to-talk |
-| Red | `recording` | Capturing audio |
-| Amber | `processing` | Transcribing / calling LLM |
-| Bright green | `done` | Text injected (shown 0.5 s) |
-| Dark red | `error` | See `voice-macro.log` for details |
+The tray icon is a pixel-art dragon with two visual variants: **dark** (inactive) and **lit** (active). An on-screen HUD overlay mirrors the current state while recording.
 
-After each successful transcription, a **Windows toast notification** appears in the bottom-right corner showing the pipeline latency (e.g. *"STT 0.8s · LLM 1.2s"*). Requires `winotify`, which is included in `requirements.txt`.
+| State | Dragon | Meaning |
+|-------|--------|---------|
+| `disabled` | Dark / gray | STT model not loaded — VRAM is completely free |
+| `loading` | Lit (static) | Loading model into VRAM (~3–15 s depending on cache) |
+| `idle` | Lit (static) | Ready, waiting for push-to-talk |
+| `recording` | Lit (pulsing) | Capturing audio |
+| `processing` | Lit (static) | Transcribing / calling LLM |
+| `done` | Lit (static) | Text injected successfully |
+| `error` | Dark / gray | See `voice-macro.log` for details |
+
+After each successful transcription, a **Windows toast notification** appears showing the injected text. Requires `winotify`, included in `requirements.txt`.
+
+> **VRAM note:** disabling the tool via the tray icon (`disabled` state) fully unloads the STT model and frees all VRAM. The background process uses only ~60–80 MB of RAM and zero GPU memory while inactive.
+
+### Custom tray icon
+
+Place your own images in `assets/icons/` before first run (or delete the generated files to regenerate):
+
+| File | Used when |
+|------|-----------|
+| `dragon_off.png` | App disabled or error |
+| `dragon_on.png` | App active (all non-disabled states) |
+
+Both files are auto-cropped and resized to fill the tray slot. Transparent backgrounds (RGBA) are supported. If neither file is present, a programmatic fallback icon is generated.
 
 ---
 
@@ -103,6 +124,7 @@ Select via right-click → **Modo** submenu. The selected mode applies to the ne
 | **INSTRUCT** | Yes | Transforms spoken procedures into numbered, imperative instructions. |
 | **REFINE** | Yes | Rewrites with professional clarity, improves argument structure, preserves intent and voice. |
 | **ACTION** | Yes | Extracts tasks, decisions, responsible parties, and deadlines from meeting-style speech. |
+| **PLAN** | Yes | Structures a verbal idea or objective into an actionable project plan with steps, risks, and next actions. |
 
 ---
 
@@ -117,24 +139,26 @@ combination = "ctrl+shift+r"    # push-to-talk hotkey
 [stt]
 model        = "large-v3-turbo" # whisper model (see docs/ARCHITECTURE.md)
 device       = "cuda"           # "cuda" | "cpu"
-compute_type = "float16"        # "float16" (≥4 GB VRAM) | "int8_float16" (2–4 GB)
+compute_type = "float16"        # "float16" (>=4 GB VRAM) | "int8_float16" (2-4 GB)
 language     = ""               # "" = auto-detect | "pt" | "en" | etc.
 
 [llm]
 model       = "google/gemini-2.5-flash-lite"  # OpenRouter model ID
-max_tokens  = 1000
+max_tokens  = 1500
 temperature = 0.3
 
 [audio]
-samplerate          = 16000   # Hz — whisper requires 16 kHz; do not change
-channels            = 1       # mono
+samplerate           = 16000   # Hz — whisper requires 16 kHz; do not change
+channels             = 1       # mono
 max_duration_seconds = 60
 
 [app]
-default_mode                = "DICTATE"
-start_enabled               = false   # false = starts disabled; VRAM free until you activate
-log_level                   = "INFO"  # DEBUG | INFO | WARNING | ERROR
+default_mode                  = "DICTATE"
+start_enabled                 = false   # true = auto-activate STT on launch
+log_level                     = "INFO"  # DEBUG | INFO | WARNING | ERROR
 delete_audio_after_processing = true
+sounds_enabled                = true    # system sounds on state change
+hud_enabled                   = true    # on-screen HUD overlay while recording
 ```
 
 ### Changing the hotkey
@@ -147,19 +171,23 @@ combination = "ctrl+alt+r"     # alternative (avoid in VNC/RDP sessions)
 combination = "f9"             # single key
 ```
 
-### Auto-start with Windows (optional)
+### Auto-start with Windows
 
-To launch voice-macro silently at login (no console window, starts in the disabled state so VRAM stays free until you activate):
+**Recommended:** run `setup.bat` (covers shortcuts + auto-start in one step).
+
+**Manual:**
 
 ```powershell
-# Install — creates a shortcut in the user's Startup folder
+# Install — registers voice-macro in the user's Startup folder
 .venv\Scripts\python.exe scripts\setup_windows_startup.py
 
 # Remove
 .venv\Scripts\python.exe scripts\setup_windows_startup.py --remove
 ```
 
-The app starts **disabled** by default (`start_enabled = false` in `config.toml`). Left-click the tray icon to load the STT model when you need it.
+The app starts in the **disabled** state regardless of `start_enabled` — the STT model is not loaded until you left-click the tray icon, so VRAM stays free at login.
+
+To auto-activate the STT model at launch (loads VRAM immediately on startup), set `start_enabled = true` in `config.toml`.
 
 ---
 
@@ -207,6 +235,12 @@ The hotkey is not being detected by pynput.
 2. Check `voice-macro.log` for `LLM processing error`.
 3. Verify the model ID in `config.toml` is valid on [openrouter.ai/models](https://openrouter.ai/models).
 
+### setup.bat fails or shortcut not created
+
+- Ensure `scripts/setup.py` was run first and `.venv\Scripts\python.exe` exists.
+- The shortcut target path is read from the Windows registry (`Shell Folders`) to handle OneDrive and custom Desktop locations automatically.
+- Run `scripts/create_shortcut.py` directly for verbose output.
+
 ---
 
 ## Project Structure
@@ -214,16 +248,22 @@ The hotkey is not being detected by pynput.
 ```
 voice-macro/
 ├── app/
-│   ├── audio/capture.py          # sounddevice InputStream → numpy array
+│   ├── audio/capture.py          # sounddevice InputStream -> numpy array
 │   ├── config/settings.py        # config.toml + .env loader
 │   ├── injection/injector.py     # clipboard paste + pynput fallback
 │   ├── llm/client.py             # OpenRouter wrapper (openai SDK)
 │   ├── logging/logger.py         # file + console logging setup
-│   ├── modes/processors.py       # mode dispatcher → LLM
+│   ├── modes/processors.py       # mode dispatcher -> LLM
 │   ├── orchestration/
 │   │   └── orchestrator.py       # event loop + pynput PTT listener
 │   ├── stt/transcriber.py        # faster-whisper wrapper (lazy VRAM loading)
-│   └── tray/tray_icon.py         # pystray 7-state icon + menu
+│   ├── tray/tray_icon.py         # pystray icon (pixel-art dragon, 7 states)
+│   └── ui/hud.py                 # on-screen HUD overlay (recording indicator)
+├── assets/
+│   └── icons/                    # tray icon sources and generated cache
+│       ├── dragon_off.png        # custom icon: app disabled (replace to customise)
+│       ├── dragon_on.png         # custom icon: app active  (replace to customise)
+│       └── voice-macro.ico       # multi-size ICO used by shortcuts (auto-generated)
 ├── docs/
 │   ├── PLAN.md                   # implementation plan (all phases)
 │   └── ARCHITECTURE.md           # technical reference for contributors
@@ -232,9 +272,11 @@ voice-macro/
 │   ├── summary.txt
 │   ├── instruct.txt
 │   ├── refine.txt
-│   └── action.txt
+│   ├── action.txt
+│   └── plan.txt
 ├── scripts/
 │   ├── setup.py                  # guided setup for new users (recommended first step)
+│   ├── create_shortcut.py        # creates Desktop + Start Menu .lnk shortcuts
 │   ├── setup_windows_startup.py  # configure auto-start at Windows login
 │   ├── debug_keys.py             # diagnose hotkey detection
 │   ├── debug_audio.py            # diagnose microphone
@@ -243,9 +285,26 @@ voice-macro/
 ├── .env.example                  # API key template
 ├── config.toml                   # all user-facing configuration
 ├── launch.bat                    # double-click launcher (no terminal needed)
+├── setup.bat                     # one-click: create shortcuts + configure auto-start
+├── voice-macro.spec              # PyInstaller build spec (produces standalone .exe)
 ├── main.py                       # entrypoint
 └── requirements.txt
 ```
+
+---
+
+## Building a standalone executable (optional)
+
+A PyInstaller spec is included for users who want a self-contained `.exe` (no Python installation required on the target machine):
+
+```powershell
+pip install pyinstaller
+pyinstaller voice-macro.spec
+```
+
+Output: `dist/voice-macro/voice-macro.exe` (~300 MB folder, models downloaded separately on first run).
+
+> Run the app at least once before building so `assets/icons/voice-macro.ico` is generated.
 
 ---
 

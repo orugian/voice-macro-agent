@@ -52,6 +52,7 @@ def main() -> None:
     orchestrator = Orchestrator(CONFIG, tray, audio, transcriber, inject, event_queue, llm_client)
 
     tray.start()
+    tray.start_if_enabled()   # no-op when start_enabled = false (default)
 
     try:
         orchestrator.run()

@@ -50,10 +50,11 @@ def _create_lnk(shortcut_path: Path) -> None:
     )
     result = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-        capture_output=True, text=True, timeout=15,
+        capture_output=True, timeout=15,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Falha no PowerShell")
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(stderr or "Falha no PowerShell")
 
 
 def main() -> None:
